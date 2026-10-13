@@ -1,53 +1,56 @@
-# IPTV Android — projet complet (Kotlin + Compose + Media3)
+# Serveur IPTV — Node.js, authentification JWT, Stripe/PayPal Sandbox
 
-Ouvrir le dossier dans Android Studio (Ladybug ou plus récent) → Sync → Run.
-Versions (AGP 8.7.2, Kotlin 2.0.21, KSP 2.0.21-1.0.25) à ajuster si Android Studio le propose.
-Ce code n'a pas été compilé ici : quelques ajustements mineurs peuvent être nécessaires.
+## État
 
-## Fonctionnalités
-- Playlists M3U : URL, fichier local, connexion Xtream Codes (génère M3U + EPG)
-- Plusieurs playlists (Room), dernière playlist rechargée au démarrage
-- Recherche, groupes, favoris, logos (Coil)
-- Guide XMLTV (.xml / .gz) : programme en cours + suivant + progression
-- Lecteur Media3 (HLS, DASH, TS...), zapping, Réessayer, minuteur de veille
-- Plein écran, image dans l'image (désactivable dans Réglages)
-- **Lecture en arrière-plan** : le lecteur vit dans PlaybackService (MediaSessionService), notification média
-- **Chromecast** : bouton Cast ; le service bascule la lecture sur l'appareil Cast et revient au téléphone à la déconnexion
-- **Enregistrement** : bouton « Enreg. » → fichier .ts dans le stockage de l'appli (service au premier plan, durée max réglable), onglet « Enreg. » pour lire / supprimer
-- **Code parental** : code à 4 chiffres (haché), groupes verrouillés au choix + groupes « adult / xxx / 18+ » verrouillés automatiquement, déverrouillage 30 min, zapping qui saute les chaînes verrouillées
-- **Android TV** : lanceur Leanback, bannière (res/drawable/banner.xml), télécommande (haut/bas = zapping, OK = contrôles)
+Ce dossier prépare un backend testable. Il n'est pas encore un service de production : les comptes de paiement, les identifiants des plans, la base hébergée et les tests réels des webhooks doivent être configurés par le propriétaire.
 
-- **Abonnement** : onglet « Abonnement » (formules, statut, paiement par carte bancaire, Google Pay, Apple Pay, PayPal ou recharge téléphonique). `REQUIRE_SUBSCRIPTION = true` dans Billing.kt exige un abonnement actif pour regarder.
+## Plans de test (USD)
 
-## Serveur de paiement (à fournir)
-L'appli ne touche jamais aux données de carte : elle appelle VOTRE serveur (`API_BASE` dans Billing.kt), qui crée une session de paiement hébergée et active l'abonnement à la réception du webhook du prestataire.
+- Mensuel : 4,99 USD
+- Trimestriel : 12,99 USD
+- Annuel : 44,99 USD
 
-| Endpoint | Rôle |
-|---|---|
-| `GET /plans` | `[{"id","name","months","price"}]` |
-| `GET /subscription` | `{"active": bool, "expires_at": <epoch secondes>}` |
-| `POST /checkout` `{plan_id, method, phone?}` | `{"checkout_url"?, "message"?}` ; `method` ∈ `card`, `google_pay`, `apple_pay`, `paypal`, `phone_topup` |
+Ces montants sont des exemples à valider. Ils ne deviennent les montants facturés qu'après création des prix récurrents correspondants dans les tableaux de bord Stripe et PayPal.
 
-Chaque requête porte `X-Account-Id` (identifiant anonyme : à remplacer par une vraie connexion).
-Prestataires possibles : Stripe Checkout (carte + Google Pay ; Apple Pay sur Safari Apple), PayPal Orders API, agrégateur mobile money / recharge selon le pays (Flutterwave, CinetPay, Paystack…). Le serveur doit vérifier les webhooks (signature) avant d'activer un abonnement.
+## Développement local
 
-## Règles à respecter
-- **Google Play** : les abonnements à du contenu numérique doivent en principe passer par Google Play Billing (qui propose carte, Google Pay, PayPal et facturation opérateur). Les paiements externes ne sont autorisés que dans certains cas/régions : vérifiez la politique en vigueur avant publication.
-- **Apple Pay** n'existe pas nativement sur Android : l'appli envoie un lien de paiement à ouvrir sur un appareil Apple.
-- Ne vendez l'accès qu'à des contenus dont vous détenez les droits.
+1. Node.js 20 ou plus récent et PostgreSQL.
+2. `npm install`
+3. Créez une base PostgreSQL et exécutez `psql "$DATABASE_URL" -f sql/schema.sql`.
+4. Copiez `.env.example` vers `.env`. Générez `AUTH_JWT_SECRET` avec `openssl rand -base64 48`. Ne publiez jamais `.env`.
+5. Créez les prix/Plans récurrents en USD dans les dashboards Sandbox et placez leurs IDs dans les variables `STRIPE_PRICE_*` et `PAYPAL_PLAN_*`.
+6. `npm test` puis `npm start`.
 
-## Limites connues
-- Chromecast : le récepteur par défaut lit surtout HLS/MP4 ; les flux MPEG-TS bruts peuvent échouer. Les enregistrements locaux ne se castent pas.
-- Enregistrement HLS : segments TS non chiffrés uniquement (pas de fMP4 ni AES-128).
-- Code parental : protection locale simple (un code à 4 chiffres reste devinable) ; il n'empêche pas de désinstaller l'appli.
-- La bannière et l'icône sont des vecteurs génériques : à remplacer par vos visuels (banner 320x180 px) avant publication.
+## Authentification
 
-## Serveur de paiement et catalogue mondial de chaînes
+- `POST /auth/register` JSON `{ "email":"test@example.com", "password":"au-moins-12-caracteres" }`
+- `POST /auth/login` JSON `{ "email":"test@example.com", "password":"..." }`
+- Les réponses contiennent un JWT Bearer à durée limitée. Envoyez `Authorization: Bearer <token>` à `/subscription` et `/checkout`.
+- Les mots de passe sont hachés avec bcrypt (coût 12), les endpoints d'authentification sont limités en débit et les identifiants anonymes `X-Account-Id` ne sont plus acceptés.
+- L'application Android actuelle utilise encore `X-Account-Id` : son écran d'inscription/connexion et son stockage sécurisé du jeton doivent être développés avant que l'application puisse utiliser ces endpoints. Ne publiez pas la vente d'abonnements avant cette intégration.
 
-Le dossier `server/` contient une API Node.js/Express avec Stripe Checkout récurrent, souscriptions PayPal, validation de signatures des webhooks, PostgreSQL, idempotence des événements et endpoints de catalogue par pays. Consultez `server/README.md` et `server/.env.example`.
+## Stripe et PayPal
 
-- API pays : `GET /api/channels/ma` (Maroc), `GET /api/channels/fr` (France), etc.
-- Playlist publique internationale classée par pays à ajouter dans l'application comme URL M3U : `https://iptv-org.github.io/iptv/index.country.m3u`.
-- Liste par pays : `https://iptv-org.github.io/iptv/countries/ma.m3u` (remplacer `ma` par le code pays ISO alpha-2).
+Stripe webhook : `POST /webhooks/stripe`. Activez au minimum `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` et `invoice.payment_failed`. La signature Stripe est vérifiée sur le corps brut et les événements sont dédupliqués en base.
 
-**Important :** aucun catalogue communautaire ne peut garantir « toutes les chaînes libres de droit ». « Accessible publiquement sur Internet » ne signifie pas nécessairement « libre de droits de rediffusion ou de monétisation ». Le catalogue IPTV-org recense des liens de flux publics et précise qu'il n'héberge pas les vidéos; vérifiez la licence et les droits de chaque chaîne dans votre pays avant de l'intégrer à une application commerciale. Source : https://github.com/iptv-org/iptv
+PayPal webhook : `POST /webhooks/paypal`. Le serveur demande à l'API PayPal de vérifier la signature avec le Webhook ID. Configurez les événements de cycle de vie d'abonnement : `BILLING.SUBSCRIPTION.ACTIVATED`, `BILLING.SUBSCRIPTION.CANCELLED`, `BILLING.SUBSCRIPTION.EXPIRED`, `BILLING.SUBSCRIPTION.SUSPENDED` et `BILLING.SUBSCRIPTION.RE-ACTIVATED`.
+
+Pour les tests locaux, utilisez les outils de test Stripe et PayPal Sandbox et un tunnel HTTPS tel que Stripe CLI pour le webhook Stripe. Ne testez pas avec de vraies cartes ou de vrais paiements. Vérifiez les logs du serveur et la ligne correspondante dans `subscriptions` après chaque événement.
+
+## Compatibilité Maroc et devise USD
+
+- Stripe ne prend pas en charge l'ouverture standard de comptes marchands directement au Maroc. Un compte Stripe live ne doit être utilisé que si l'entreprise dispose réellement d'une entité et des documents bancaires/fiscaux exigés dans un pays pris en charge. Ne contournez pas les contrôles d'éligibilité. Source : https://stripe.com/global et https://support.stripe.com/questions/requirements-to-open-a-stripe-account-in-another-country
+- PayPal publie une offre de paiements récurrents pour le Maroc : https://www.paypal.com/ma/business/accept-payments/checkout/recurring. Confirmez les fonctionnalités de réception, de retrait et les conditions de compte directement dans PayPal Business avant la mise en production.
+- Les plans de test utilisent USD, mais la devise et le montant facturés proviennent des objets de prix réels créés dans chaque fournisseur.
+
+## Hébergement gratuit (tests seulement)
+
+Render permet d'héberger un service web Node.js gratuit avec HTTPS, mais les services gratuits s'endorment après 15 minutes d'inactivité et la base PostgreSQL gratuite expire après 30 jours. Ce n'est pas recommandé pour vendre des abonnements ou conserver des données clients en production. Consultez https://render.com/docs/free.
+
+Déploiement test : connecter le dépôt à Render, créer un Web Service depuis le dossier `server`, Build Command `npm install`, Start Command `npm start`, ajouter les variables d'environnement depuis `.env.example` dans le tableau de bord, créer PostgreSQL et renseigner son URL. Définir `PUBLIC_BASE_URL` sur l'URL HTTPS Render réelle. Ne stockez pas les secrets dans le dépôt Git.
+
+## Publication Google Play et contenu IPTV
+
+Vérifiez la politique Google Play Billing pour les abonnements donnant accès à du contenu numérique, y compris les programmes d'accès alternatif applicables à votre marché : https://support.google.com/googleplay/android-developer/answer/10281818. Une intégration Stripe/PayPal externe dans l'app n'est pas automatiquement permise.
+
+Un flux public IPTV n'est pas automatiquement libre de droits. Gardez une preuve de licence/autorisation pour chaque chaîne commercialisée et retirez les flux dont les droits ne sont pas établis.

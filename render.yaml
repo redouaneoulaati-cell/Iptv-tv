@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: iptv-subscription-api-test
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: AUTH_JWT_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_QUARTERLY
+        sync: false
+      - key: STRIPE_PRICE_YEARLY
+        sync: false
+      - key: PAYPAL_MODE
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_PLAN_MONTHLY
+        sync: false
+      - key: PAYPAL_PLAN_QUARTERLY
+        sync: false
+      - key: PAYPAL_PLAN_YEARLY
+        sync: false
