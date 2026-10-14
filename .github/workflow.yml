@@ -21,6 +21,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          components: |
+            platform-tools
+            platforms;android-33
+            build-tools;33.0.2
+            cmdline-tools;11.0.0
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
