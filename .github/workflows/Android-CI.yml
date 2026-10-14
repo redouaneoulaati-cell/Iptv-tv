@@ -27,7 +27,11 @@ jobs:
             platform-tools
             platforms;android-33
             build-tools;33.0.2
-            cmdline-tools;latest
+            cmdline-tools;9.0.2
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/9.0.2/bin/sdkmanager --licenses || true
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
